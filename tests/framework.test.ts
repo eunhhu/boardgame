@@ -16,29 +16,21 @@ import type { HalliCard, HalliPlayerState, HalliState } from "../games/haligali/
 
 describe("protocol", () => {
   test("validates commands and rejects invalid revisions", () => {
-    expect(
-      parseClientMessage(
-        JSON.stringify({
-          version: 1,
-          type: "command",
-          requestId: "r1",
-          expectedRevision: 3,
-          command: { type: "flip" },
-        }),
-      ),
-    ).toMatchObject({ type: "command", expectedRevision: 3 });
+    expect(parseClientMessage(JSON.stringify({
+      version: 1,
+      type: "command",
+      requestId: "r1",
+      expectedRevision: 3,
+      command: { type: "flip" },
+    }))).toMatchObject({ type: "command", expectedRevision: 3 });
 
-    expect(() =>
-      parseClientMessage(
-        JSON.stringify({
-          version: 1,
-          type: "command",
-          requestId: "r1",
-          expectedRevision: -1,
-          command: {},
-        }),
-      ),
-    ).toThrow(ProtocolError);
+    expect(() => parseClientMessage(JSON.stringify({
+      version: 1,
+      type: "command",
+      requestId: "r1",
+      expectedRevision: -1,
+      command: {},
+    }))).toThrow(ProtocolError);
   });
 });
 
@@ -116,17 +108,12 @@ describe("room actor", () => {
   });
 });
 
-const card = (fruit: HalliCard["fruit"], count: HalliCard["count"]): HalliCard => ({
-  fruit,
-  count,
-});
-
+const card = (fruit: HalliCard["fruit"], count: HalliCard["count"]): HalliCard => ({ fruit, count });
 const player = (
   drawPile: readonly HalliCard[],
   faceUp: readonly HalliCard[] = [],
   eliminated = false,
 ): HalliPlayerState => ({ ready: true, drawPile, faceUp, eliminated });
-
 const playingState = (
   order: HalliState["order"],
   players: HalliState["players"],
@@ -165,12 +152,10 @@ describe("Halli Galli", () => {
     await harness.command(guest, { type: "ready", ready: true });
     await harness.command(host, { type: "start" });
 
-    expect(
-      Object.values(harness.state.players).reduce(
-        (sum, value) => sum + value.drawPile.length,
-        0,
-      ),
-    ).toBe(56);
+    expect(Object.values(harness.state.players).reduce(
+      (sum, value) => sum + value.drawPile.length,
+      0,
+    )).toBe(56);
     const view = JSON.stringify(harness.view(host));
     expect(view).not.toContain("drawPile");
     expect(view).not.toContain("fruitTotals");
@@ -192,9 +177,10 @@ describe("Halli Galli", () => {
       [two.id]: player([card("plum", 1)], [card("banana", 4)]),
     });
     expect(ringingFruit(harness.state)).toBeNull();
-    expect(await harness.command(one, { type: "ring" })).toEqual([
-      expect.objectContaining({ type: "bell.rung", correct: false }),
-    ]);
+    const events = await harness.command(one, { type: "ring" });
+    expect(events[0]).toMatchObject({ type: "bell.rung", correct: false });
+    expect(harness.state.phase).toBe("finished");
+    expect(harness.state.winnerId).toBe(two.id);
   });
 
   test("a newly covering card can create a valid five", async () => {
@@ -217,14 +203,10 @@ describe("Halli Galli", () => {
     const harness = new GameHarness(haligaliGame);
     const one = await harness.join("One");
     const two = await harness.join("Two");
-    harness.state = playingState(
-      [one.id, two.id],
-      {
-        [one.id]: player([card("lime", 1)], [card("plum", 1), card("banana", 2)]),
-        [two.id]: player([card("plum", 1)], [card("strawberry", 4), card("banana", 3)]),
-      },
-      1,
-    );
+    harness.state = playingState([one.id, two.id], {
+      [one.id]: player([card("lime", 1)], [card("plum", 1), card("banana", 2)]),
+      [two.id]: player([card("plum", 1)], [card("strawberry", 4), card("banana", 3)]),
+    }, 1);
 
     await harness.command(one, { type: "ring" });
     expect(harness.state.players[one.id]?.drawPile).toHaveLength(5);
@@ -256,7 +238,7 @@ describe("Halli Galli", () => {
     const two = await harness.join("Two");
     const three = await harness.join("Three");
     harness.state = playingState([one.id, two.id, three.id], {
-      [one.id]: player([card("lime", 2)], [card("banana", 2)]),
+      [one.id]: player([card("banana", 2)], [card("lime", 1)]),
       [two.id]: player([card("plum", 1)], [card("banana", 3)]),
       [three.id]: player([card("strawberry", 1)]),
     });
