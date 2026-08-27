@@ -59,12 +59,13 @@ describe("auth", () => {
     expect(await signer.verify(issued.token)).toBeNull();
 
     const tickets = new JoinTicketStore();
+    const roomId = asRoomId("room");
     const ticket = tickets.issue({
-      roomId: asRoomId("room"),
+      roomId,
       participantId: asParticipantId("participant"),
       sessionId: asSessionId("session"),
     });
-    expect(tickets.consume(ticket)?.roomId).toBe("room");
+    expect(tickets.consume(ticket)?.roomId).toBe(roomId);
     expect(tickets.consume(ticket)).toBeNull();
   });
 });
