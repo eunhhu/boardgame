@@ -13,8 +13,10 @@ const encodeBase64Url = (value: Uint8Array | string): string =>
     "base64url",
   );
 
-const decodeBase64Url = (value: string): Uint8Array =>
-  new Uint8Array(Buffer.from(value, "base64url"));
+const decodeBase64Url = (value: string): ArrayBuffer => {
+  const bytes = Uint8Array.from(Buffer.from(value, "base64url"));
+  return bytes.buffer as ArrayBuffer;
+};
 
 export interface SessionClaims extends SessionPrincipal {
   readonly issuedAt: number;
