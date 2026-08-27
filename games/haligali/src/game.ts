@@ -31,7 +31,6 @@ export interface HalliState {
   readonly dealerId: ParticipantId | null;
   readonly winnerId: ParticipantId | null;
   readonly lastBell: HalliBellResult | null;
-  readonly lastFlipperId: ParticipantId | null;
   readonly round: number;
 }
 
@@ -146,10 +145,7 @@ function parseCommand(value: unknown): HalliCommand {
   }
 }
 
-const playerState = (
-  state: HalliState,
-  playerId: ParticipantId,
-): HalliPlayerState => {
+const playerState = (state: HalliState, playerId: ParticipantId): HalliPlayerState => {
   const player = state.players[playerId];
   if (!player) throw new Error("Player is not part of this game");
   return player;
@@ -164,8 +160,10 @@ const replacePlayer = (
   players: { ...state.players, [playerId]: player },
 });
 
-const activeIds = (state: HalliState): ParticipantId[] =>
-  state.order.filter((id) => !state.players[id]?.eliminated);
+const activeIds = (
+  state: HalliState,
+  players: Readonly<Record<string, HalliPlayerState>> = state.players,
+): ParticipantId[] => state.order.filter((id) => !players[id]?.eliminated);
 
 const fruitTotals = (state: HalliState): Record<Fruit, number> => {
   const totals: Record<Fruit, number> = {
@@ -175,8 +173,8 @@ const fruitTotals = (state: HalliState): Record<Fruit, number> => {
     plum: 0,
   };
   for (const id of state.order) {
-    const card = state.players[id]?.faceUp.at(-1);
-    if (card) totals[card.fruit] += card.count;
+    const top = state.players[id]?.faceUp.at(-1);
+    if (top) totals[top.fruit] += top.count;
   }
   return totals;
 };
@@ -218,16 +216,12 @@ const applyBell = (
   if (event.correct) {
     for (const id of state.order) {
       const player = players[id];
-      if (!player) continue;
-      players[id] = { ...player, faceUp: [] };
+      if (player) players[id] = { ...player, faceUp: [] };
     }
-
     const ringer = players[event.playerId]!;
-    const nextDrawPile = [...ringer.drawPile, ...event.captured];
     players[event.playerId] = {
       ...ringer,
-      drawPile: nextDrawPile,
-      eliminated: nextDrawPile.length === 0 ? ringer.eliminated : false,
+      drawPile: [...ringer.drawPile, ...event.captured],
     };
   } else {
     const ringer = players[event.playerId]!;
@@ -258,7 +252,6 @@ const applyBell = (
       penaltyCount: event.transfers.length,
       fruit: event.fruit,
     },
-    lastFlipperId: null,
     round: event.correct ? state.round + 1 : state.round,
   };
 };
@@ -282,7 +275,6 @@ export const haligaliGame = defineGame<
     dealerId: null,
     winnerId: null,
     lastBell: null,
-    lastFlipperId: null,
     round: 0,
   }),
 
@@ -312,9 +304,7 @@ export const haligaliGame = defineGame<
           throw new Error("Ready state can only change in the lobby");
         }
         if (actorState.ready === command.ready) return [];
-        return [
-          { type: "ready.changed", playerId: actor.id, ready: command.ready },
-        ];
+        return [{ type: "ready.changed", playerId: actor.id, ready: command.ready }];
       }
 
       case "start": {
@@ -344,14 +334,15 @@ export const haligaliGame = defineGame<
       case "flip": {
         if (state.phase !== "playing") throw new Error("The game is not active");
         if (actorState.eliminated) throw new Error("You have been eliminated");
-        const currentId = state.order[state.activeIndex];
-        if (currentId !== actor.id) throw new Error("It is not your turn");
+        if (state.order[state.activeIndex] !== actor.id) {
+          throw new Error("It is not your turn");
+        }
         const card = actorState.drawPile[0];
         if (!card) throw new Error("You have no face-down cards left");
 
         const remainingDraw = actorState.drawPile.slice(1);
         const eliminated = remainingDraw.length === 0;
-        const provisionalPlayers: Record<string, HalliPlayerState> = {
+        const playersAfter: Record<string, HalliPlayerState> = {
           ...state.players,
           [actor.id]: {
             ...actorState,
@@ -360,15 +351,11 @@ export const haligaliGame = defineGame<
             eliminated,
           },
         };
-        const provisional: HalliState = {
-          ...state,
-          players: provisionalPlayers,
-          lastFlipperId: actor.id,
-        };
+        const provisional: HalliState = { ...state, players: playersAfter };
         const nextIndex = nextActiveIndex(
           provisional,
           (state.activeIndex + 1) % state.order.length,
-          provisionalPlayers,
+          playersAfter,
         );
         const flipEvent: Extract<HalliEvent, { type: "card.flipped" }> = {
           type: "card.flipped",
@@ -377,24 +364,15 @@ export const haligaliGame = defineGame<
           nextIndex,
           eliminated,
         };
-
-        const alive = state.order.filter((id) => !provisionalPlayers[id]?.eliminated);
-        if (alive.length <= 1 && ringingFruit(provisional) === null) {
-          return [
-            flipEvent,
-            { type: "game.finished", winnerId: alive[0] ?? actor.id },
-          ];
-        }
-        return [flipEvent];
+        const alive = activeIds(provisional, playersAfter);
+        return alive.length <= 1
+          ? [flipEvent, { type: "game.finished", winnerId: alive[0] ?? actor.id }]
+          : [flipEvent];
       }
 
       case "ring": {
         if (state.phase !== "playing") throw new Error("The game is not active");
-        const hasLastFlipGrace =
-          actorState.eliminated && state.lastFlipperId === actor.id;
-        if (actorState.eliminated && !hasLastFlipGrace) {
-          throw new Error("Eliminated players cannot ring the bell");
-        }
+        if (actorState.eliminated) throw new Error("Eliminated players cannot ring the bell");
 
         const fruit = ringingFruit(state);
         const correct = fruit !== null;
@@ -405,9 +383,9 @@ export const haligaliGame = defineGame<
           const recipients = activeIds(state).filter((id) => id !== actor.id);
           const available = [...actorState.drawPile];
           for (const id of recipients) {
-            const card = available.shift();
-            if (!card) break;
-            transfers.push({ to: id, card });
+            const penaltyCard = available.shift();
+            if (!penaltyCard) break;
+            transfers.push({ to: id, card: penaltyCard });
           }
         }
 
@@ -421,7 +399,6 @@ export const haligaliGame = defineGame<
           playersAfter[actor.id] = {
             ...ringer,
             drawPile: [...ringer.drawPile, ...captured],
-            eliminated: false,
           };
         } else {
           const remaining = actorState.drawPile.slice(transfers.length);
@@ -453,12 +430,10 @@ export const haligaliGame = defineGame<
           nextIndex,
           fruit,
         };
-
-        const alive = state.order.filter((id) => !playersAfter[id]?.eliminated);
-        if (alive.length === 1) {
-          return [bellEvent, { type: "game.finished", winnerId: alive[0]! }];
-        }
-        return [bellEvent];
+        const alive = activeIds(afterForTurn, playersAfter);
+        return alive.length === 1
+          ? [bellEvent, { type: "game.finished", winnerId: alive[0]! }]
+          : [bellEvent];
       }
 
       case "rematch": {
@@ -522,7 +497,6 @@ export const haligaliGame = defineGame<
           dealerId: event.dealerId,
           winnerId: null,
           lastBell: null,
-          lastFlipperId: null,
           round: 1,
         };
 
@@ -537,7 +511,6 @@ export const haligaliGame = defineGame<
           }),
           activeIndex: event.nextIndex,
           lastBell: null,
-          lastFlipperId: event.playerId,
         };
       }
 
@@ -545,12 +518,7 @@ export const haligaliGame = defineGame<
         return applyBell(state, event);
 
       case "game.finished":
-        return {
-          ...state,
-          phase: "finished",
-          winnerId: event.winnerId,
-          lastFlipperId: null,
-        };
+        return { ...state, phase: "finished", winnerId: event.winnerId };
 
       case "game.reset":
         return {
@@ -571,7 +539,6 @@ export const haligaliGame = defineGame<
           dealerId: null,
           winnerId: null,
           lastBell: null,
-          lastFlipperId: null,
           round: 0,
         };
     }
@@ -601,8 +568,6 @@ export const haligaliGame = defineGame<
     const self = viewer ? state.players[viewer.id] : undefined;
     const allReady =
       state.order.length >= 2 && state.order.every((id) => state.players[id]?.ready);
-    const ringGrace =
-      Boolean(viewer && self?.eliminated && state.lastFlipperId === viewer.id);
 
     return {
       phase: state.phase,
@@ -628,15 +593,10 @@ export const haligaliGame = defineGame<
           self.drawPile.length > 0,
       ),
       canRing: Boolean(
-        viewer &&
-          self &&
-          state.phase === "playing" &&
-          (!self.eliminated || ringGrace),
+        viewer && self && !self.eliminated && state.phase === "playing",
       ),
       canRematch: Boolean(
-        viewer &&
-          room.hostId === viewer.id &&
-          state.phase === "finished",
+        viewer && room.hostId === viewer.id && state.phase === "finished",
       ),
       selfReady: self?.ready ?? false,
       selfEliminated: self?.eliminated ?? false,

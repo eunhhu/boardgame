@@ -16,11 +16,10 @@ runtime.
   winner's draw pile. The bell winner flips first in the next round.
 - A wrong bell pays one face-down card to every other active player, as far as
   the ringer has cards available.
-- A player whose draw pile is exhausted is eliminated; their face-up pile stays
-  on the table and still counts until somebody captures it.
-- If a player's final flip creates a valid bell, that player gets the same
-  reaction window as everyone else and can save themselves by winning the bell.
-- The last active player wins.
+- A player whose draw pile is exhausted is immediately eliminated; their face-up
+  pile stays on the table and still counts until somebody captures it.
+- Eliminated players cannot ring the bell or flip another card.
+- The last player with cards in their draw pile wins.
 - The host can reset the table for a rematch without creating a new room.
 
 ## Digital fairness
