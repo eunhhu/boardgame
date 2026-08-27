@@ -1,0 +1,13 @@
+{
+  "name": "@bgame/game-haligali",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bgame": {
+    "title": "Halli Galli"
+  },
+  "scripts": {
+    "dev": "bun run src/server.ts",
+    "test": "bun test src"
+  }
+}
