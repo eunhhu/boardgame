@@ -1,0 +1,32 @@
+{
+  "name": "boardgame",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.0",
+  "bin": {
+    "bgame": "./packages/cli/src/index.ts"
+  },
+  "workspaces": [
+    "games/*"
+  ],
+  "scripts": {
+    "bgame": "bun run packages/cli/src/index.ts",
+    "dev": "bun run bgame haligali",
+    "dev:haligali": "bun run games/haligali/src/server.ts",
+    "link:cli": "bun link",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "bun test",
+    "check": "bun run typecheck && bun test"
+  },
+  "dependencies": {
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.21",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "typescript": "^5.9.2"
+  }
+}
