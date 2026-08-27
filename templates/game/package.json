@@ -1,0 +1,13 @@
+{
+  "name": "@bgame/game-__GAME_SLUG__",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bgame": {
+    "title": "__GAME_TITLE__"
+  },
+  "scripts": {
+    "dev": "bun run src/server.ts",
+    "test": "bun test src"
+  }
+}
